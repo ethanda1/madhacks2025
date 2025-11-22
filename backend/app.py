@@ -141,10 +141,17 @@ def search_google_shopping_price(item_name, location=None, store_filter=None):
                     # Extract extensions (e.g., "Nearby, 3 mi", "37% OFF")
                     extensions = result.get('extensions', [])
                     nearby_info = None
+                    discount_info = None
                     for ext in extensions:
                         if 'nearby' in ext.lower() or 'mi' in ext.lower():
                             nearby_info = ext
-                            break
+                        elif '%' in ext.lower() or 'off' in ext.lower():
+                            discount_info = ext
+                    
+                    # Also check for tag field (discounts)
+                    tag = result.get('tag', '')
+                    if tag and not discount_info:
+                        discount_info = tag
                     
                     # Store price by source (keep lowest price per source)
                     if source not in prices:
@@ -161,6 +168,7 @@ def search_google_shopping_price(item_name, location=None, store_filter=None):
                             'location': store_location,  # Store location information
                             'source': source,  # Store name
                             'nearby': nearby_info,  # Nearby distance info (e.g., "Nearby, 3 mi")
+                            'discount': discount_info,  # Discount info (e.g., "37% OFF")
                             'extensions': extensions  # All extensions
                         }
                     else:
@@ -180,6 +188,7 @@ def search_google_shopping_price(item_name, location=None, store_filter=None):
                                 'location': store_location,  # Store location information
                                 'source': source,  # Store name
                                 'nearby': nearby_info,  # Nearby distance info (e.g., "Nearby, 3 mi")
+                                'discount': discount_info,  # Discount info (e.g., "37% OFF")
                                 'extensions': extensions  # All extensions
                             }
         
@@ -558,6 +567,23 @@ def generate_recipe():
         1. A brief recipe description
         2. A list of ingredients with quantities (e.g., "1 lb Ground Beef", "2 cups Shredded Cheese")
         3. Basic cooking instructions
+        
+        IMPORTANT: Only include ingredients that users need to purchase at a grocery store. 
+        DO NOT include:
+        - Water (tap water, assume it's available)
+        - Salt (assume it's a common pantry item)
+        - Black pepper (assume it's a common pantry item)
+        - Basic spices that are typically in every kitchen (salt, pepper, basic seasonings)
+        - Cooking oil (unless it's a specific type like olive oil or sesame oil)
+        - Common pantry staples that most people already have
+        
+        Only include ingredients that are:
+        - Fresh produce (vegetables, fruits, herbs)
+        - Meat, poultry, or seafood
+        - Dairy products
+        - Specific packaged items
+        - Specialty ingredients
+        - Items that vary by recipe and need to be purchased
         
         Format your response as JSON with this structure:
         {{

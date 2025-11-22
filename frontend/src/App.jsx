@@ -107,9 +107,11 @@ function App() {
       }
       
       if (data.success && data.ingredients) {
-        setGeneratedIngredients(
-          data.ingredients.map((i) => ({ ...i, price: null, loading: false }))
-        );
+        const ingredients = data.ingredients.map((i) => ({ ...i, price: null, loading: true }));
+        setGeneratedIngredients(ingredients);
+        
+        // Automatically fetch prices for all ingredients
+        fetchAllPrices(ingredients);
       } else {
         throw new Error(data.error || "Failed to generate recipe");
       }
@@ -120,6 +122,41 @@ function App() {
     } finally {
       setIsGenerating(false);
     }
+  }
+
+  async function fetchAllPrices(ingredients) {
+    // Fetch prices for all ingredients in parallel for efficiency
+    const pricePromises = ingredients.map(async (item) => {
+      try {
+        const priceData = await fetchPrice(item.name);
+        return { id: item.id, priceData };
+      } catch (error) {
+        console.error(`Error fetching price for ${item.name}:`, error);
+        return { id: item.id, priceData: null };
+      }
+    });
+
+    // Wait for all prices to be fetched
+    const results = await Promise.all(pricePromises);
+
+    // Update ingredients with fetched prices
+    setGeneratedIngredients((prev) =>
+      prev.map((ingredient) => {
+        const result = results.find((r) => r.id === ingredient.id);
+        if (result && result.priceData) {
+          return {
+            ...ingredient,
+            price: result.priceData.price,
+            stores: result.priceData.stores,
+            storeDetails: result.priceData.storeDetails,
+            priceSource: result.priceData.source,
+            priceNote: result.priceData.note,
+            loading: false,
+          };
+        }
+        return { ...ingredient, loading: false };
+      })
+    );
   }
 
   function addToShoppingList(item) {
@@ -271,20 +308,34 @@ function App() {
                               onError={(e) => { e.target.style.display = 'none'; }}
                             />
                           )}
-                          {item.storeDetails && item.storeDetails[item.priceSource] && item.storeDetails[item.priceSource].link ? (
-                            <a
-                              href={item.storeDetails[item.priceSource].link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-green-700 dark:text-green-400 font-bold text-lg hover:text-green-800 dark:hover:text-green-300 hover:underline cursor-pointer transition-colors"
-                            >
-                              💰 Best: {item.price} {item.priceSource && `@ ${item.priceSource}`}
-                            </a>
-                          ) : (
-                            <p className="text-green-700 dark:text-green-400 font-bold text-lg">
-                              💰 Best: {item.price} {item.priceSource && `@ ${item.priceSource}`}
-                            </p>
-                          )}
+                          <div className="flex-1">
+                            {item.storeDetails && item.storeDetails[item.priceSource] && item.storeDetails[item.priceSource].link ? (
+                              <a
+                                href={item.storeDetails[item.priceSource].link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-green-700 dark:text-green-400 font-bold text-lg hover:text-green-800 dark:hover:text-green-300 hover:underline cursor-pointer transition-colors"
+                              >
+                                💰 Best: {item.price} {item.priceSource && `@ ${item.priceSource}`}
+                              </a>
+                            ) : (
+                              <p className="text-green-700 dark:text-green-400 font-bold text-lg">
+                                💰 Best: {item.price} {item.priceSource && `@ ${item.priceSource}`}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 mt-1">
+                              {item.storeDetails && item.storeDetails[item.priceSource] && item.storeDetails[item.priceSource].nearby && (
+                                <span className="text-blue-600 dark:text-blue-400 text-xs bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-full">
+                                  📍 {item.storeDetails[item.priceSource].nearby}
+                                </span>
+                              )}
+                              {item.storeDetails && item.storeDetails[item.priceSource] && item.storeDetails[item.priceSource].discount && (
+                                <span className="text-red-600 dark:text-red-400 text-xs bg-red-50 dark:bg-red-900/30 px-2 py-1 rounded-full font-semibold">
+                                  🏷️ {item.storeDetails[item.priceSource].discount}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                         
                         {/* All Store Prices with Logos - Collapsible Dropdown */}
@@ -339,6 +390,11 @@ function App() {
                                           📍 {storeDetail.nearby}
                                         </span>
                                       )}
+                                      {storeDetail && storeDetail.discount && (
+                                        <span className="text-red-600 dark:text-red-400 text-xs bg-red-50 dark:bg-red-900/30 px-2 py-1 rounded-full font-semibold">
+                                          🏷️ {storeDetail.discount}
+                                        </span>
+                                      )}
                                     </div>
                                   );
                                 })}
@@ -355,31 +411,15 @@ function App() {
                   </div>
 
                   <div className="flex flex-col gap-2 ml-4">
-                    <button
-                      onClick={() => addPriceToItem(item.id)}
-                      disabled={item.loading}
-                      className={`px-4 py-2 rounded-xl font-semibold text-sm transition-colors ${
-                        item.loading
-                          ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 cursor-not-allowed'
-                          : item.price
-                          ? 'bg-blue-500 hover:bg-blue-600 text-white'
-                          : 'bg-blue-500 hover:bg-blue-600 text-white'
-                      }`}
-                    >
-                      {item.loading ? (
-                        <span className="flex items-center gap-2">
-                          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Loading...
-                        </span>
-                      ) : item.price ? (
-                        '✓ Fetched'
-                      ) : (
-                        '💰 Fetch Price'
-                      )}
-                    </button>
+                    {item.loading && (
+                      <div className="px-4 py-2 rounded-xl font-semibold text-sm bg-gray-300 dark:bg-gray-600 text-gray-500 flex items-center gap-2">
+                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Loading...
+                      </div>
+                    )}
 
                     <button
                       onClick={() => addToShoppingList(item)}
