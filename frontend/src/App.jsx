@@ -108,8 +108,8 @@ function App() {
 
   return (
     <>
-      <div className="min-h-screen p-6 bg-white flex flex-col items-center">
-        <h1 className="text-3xl font-bold mb-6 text-center">Meal → Grocery Generator</h1>
+      <div className="min-h-screen p-6 bg-white dark:bg-gray-900 flex flex-col items-center transition-colors duration-200">
+        <h1 className="text-3xl font-bold mb-6 text-center text-gray-900 dark:text-white">Meal → Grocery Generator</h1>
 
         {/* Meal Idea Input */}
         <div className="w-full max-w-md mb-6">
@@ -117,7 +117,7 @@ function App() {
             value={mealIdea}
             onChange={(e) => setMealIdea(e.target.value)}
             placeholder="Type a meal idea (e.g., Chicken Tacos)"
-            className="border border-gray-300 rounded-xl p-4 w-full"
+            className="border border-gray-300 dark:border-gray-600 rounded-xl p-4 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
           />
           <button
             onClick={generateIngredients}
@@ -130,16 +130,16 @@ function App() {
         {/* Generated Ingredient List */}
         {generatedIngredients.length > 0 && (
           <div className="w-full max-w-md mb-10">
-            <h2 className="text-2xl font-bold mb-2">Ingredients Needed</h2>
+            <h2 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">Ingredients Needed</h2>
 
             <div className="space-y-3">
               {generatedIngredients.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between p-4 bg-gray-100 rounded-xl shadow-sm"
+                  className="flex items-center justify-between p-4 bg-gray-100 dark:bg-gray-800 rounded-xl shadow-sm"
                 >
                   <div className="flex-1">
-                    <p className="font-medium">{item.name}</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{item.name}</p>
                     {item.price && (
                       <div className="mt-1">
                         <p className="text-green-600 font-semibold">
@@ -185,16 +185,16 @@ function App() {
         {/* Final Shopping List */}
         {shoppingList.length > 0 && (
           <div className="w-full max-w-md">
-            <h2 className="text-2xl font-bold mb-2">Final Shopping List</h2>
+            <h2 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">Final Shopping List</h2>
 
             <div className="space-y-3">
               {shoppingList.map((item) => (
                 <div
                   key={item.id}
-                  className="p-4 bg-yellow-100 rounded-xl shadow-sm flex justify-between"
+                  className="p-4 bg-yellow-100 dark:bg-yellow-900 rounded-xl shadow-sm flex justify-between"
                 >
-                  <p>{item.name}</p>
-                  {item.price && <p className="font-semibold">{item.price}</p>}
+                  <p className="text-gray-900 dark:text-white">{item.name}</p>
+                  {item.price && <p className="font-semibold text-gray-900 dark:text-white">{item.price}</p>}
                 </div>
               ))}
             </div>
