@@ -13,7 +13,12 @@ function App() {
       );
       if (!res.ok) throw new Error("Network response was not ok");
       const data = await res.json();
-      return data.price || null;
+      return {
+        price: data.price || null,
+        stores: data.stores || {},
+        source: data.source || 'unknown',
+        note: data.note || null
+      };
     } catch (err) {
       console.error("fetchPrice error:", err);
       return null;
@@ -28,13 +33,28 @@ function App() {
     );
 
     const item = generatedIngredients.find((i) => i.id === id);
-    const price = await fetchPrice(item.name);
+    const priceData = await fetchPrice(item.name);
 
-    setGeneratedIngredients((prev) =>
-      prev.map((i) =>
-        i.id === id ? { ...i, price, loading: false } : i
-      )
-    );
+    if (priceData) {
+      setGeneratedIngredients((prev) =>
+        prev.map((i) =>
+          i.id === id ? { 
+            ...i, 
+            price: priceData.price, 
+            stores: priceData.stores,
+            priceSource: priceData.source,
+            priceNote: priceData.note,
+            loading: false 
+          } : i
+        )
+      );
+    } else {
+      setGeneratedIngredients((prev) =>
+        prev.map((i) =>
+          i.id === id ? { ...i, loading: false } : i
+        )
+      );
+    }
   }
 
   function calculateTotal() {
@@ -118,10 +138,26 @@ function App() {
                   key={item.id}
                   className="flex items-center justify-between p-4 bg-gray-100 rounded-xl shadow-sm"
                 >
-                  <div>
-                    <p>{item.name}</p>
+                  <div className="flex-1">
+                    <p className="font-medium">{item.name}</p>
                     {item.price && (
-                      <p className="text-green-600 font-semibold">Price: {item.price}</p>
+                      <div className="mt-1">
+                        <p className="text-green-600 font-semibold">
+                          Best Price: {item.price} {item.priceSource && `(${item.priceSource})`}
+                        </p>
+                        {item.stores && Object.keys(item.stores).length > 1 && (
+                          <div className="text-xs text-gray-600 mt-1">
+                            {Object.entries(item.stores).map(([store, price]) => (
+                              <span key={store} className="mr-2">
+                                {store}: {price}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {item.priceNote && (
+                          <p className="text-xs text-gray-500 italic">{item.priceNote}</p>
+                        )}
+                      </div>
                     )}
                   </div>
 

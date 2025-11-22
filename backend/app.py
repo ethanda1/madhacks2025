@@ -6,6 +6,11 @@ from dotenv import load_dotenv
 import os
 import json
 import traceback
+import requests
+from bs4 import BeautifulSoup
+import re
+import time
+from urllib.parse import quote_plus
 
 # Load environment variables from .env file
 load_dotenv()
@@ -53,6 +58,283 @@ def check_key():
             "status": "error",
             "message": "API key is NOT set. Please set OPENAI_API_KEY environment variable."
         }), 503
+
+def search_walmart_price(item_name):
+    """Search for item price on Walmart.com"""
+    try:
+        # Clean item name for search
+        search_query = item_name.split('(')[0].strip()  # Remove quantity info
+        search_url = f"https://www.walmart.com/search?q={quote_plus(search_query)}"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+        
+        response = requests.get(search_url, headers=headers, timeout=10, allow_redirects=True)
+        print(f"Walmart request status: {response.status_code} for {search_query}")
+        
+        if response.status_code != 200:
+            print(f"Walmart returned status {response.status_code}")
+            return None
+        
+        # Check if we got blocked or redirected to a different page
+        if 'blocked' in response.url.lower() or 'captcha' in response.text.lower():
+            print("Walmart blocked or captcha detected")
+            return None
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Try to find price - Walmart's structure varies, so we'll try multiple selectors
+        price_selectors = [
+            '[data-automation-id="product-price"]',
+            '.price-current',
+            '[itemprop="price"]',
+            '.price',
+            '[data-testid="product-price"]',
+            '.w_iUH7',
+            'span[class*="price"]',
+        ]
+        
+        for selector in price_selectors:
+            price_elem = soup.select_one(selector)
+            if price_elem:
+                price_text = price_elem.get_text(strip=True)
+                # Extract price number
+                price_match = re.search(r'\$?(\d+\.?\d*)', price_text)
+                if price_match:
+                    price = f"${price_match.group(1)}"
+                    print(f"Walmart found price: {price} for {search_query}")
+                    return price
+        
+        print(f"Walmart: No price found for {search_query}")
+        return None
+    except Exception as e:
+        print(f"Walmart search error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+def search_target_price(item_name):
+    """Search for item price on Target.com"""
+    try:
+        search_query = item_name.split('(')[0].strip()
+        search_url = f"https://www.target.com/s?searchTerm={quote_plus(search_query)}"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+        }
+        
+        response = requests.get(search_url, headers=headers, timeout=10, allow_redirects=True)
+        print(f"Target request status: {response.status_code} for {search_query}")
+        
+        if response.status_code != 200:
+            print(f"Target returned status {response.status_code}")
+            return None
+        
+        # Check if we got blocked
+        if 'blocked' in response.url.lower() or 'captcha' in response.text.lower():
+            print("Target blocked or captcha detected")
+            return None
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Target price selectors - try multiple
+        price_selectors = [
+            '[data-test="product-price"]',
+            '[data-testid="product-price"]',
+            'span[data-test*="price"]',
+            '.h-text-bold',
+            '[class*="price"]',
+        ]
+        
+        for selector in price_selectors:
+            price_elem = soup.select_one(selector)
+            if price_elem:
+                price_text = price_elem.get_text(strip=True)
+                price_match = re.search(r'\$?(\d+\.?\d*)', price_text)
+                if price_match:
+                    price = f"${price_match.group(1)}"
+                    print(f"Target found price: {price} for {search_query}")
+                    return price
+        
+        print(f"Target: No price found for {search_query}")
+        return None
+    except Exception as e:
+        print(f"Target search error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+def get_mock_price(item_name):
+    """Generate a mock price based on item type (fallback)"""
+    # More realistic mock pricing for demo purposes
+    import random
+    item_lower = item_name.lower()
+    
+    # Base prices with some variation
+    if any(word in item_lower for word in ['chicken', 'beef', 'pork', 'meat', 'diced']):
+        base = 7.99
+        variation = random.uniform(-1.50, 2.00)
+        return f"${base + variation:.2f}"
+    elif any(word in item_lower for word in ['cheese', 'dairy', 'shredded']):
+        base = 4.49
+        variation = random.uniform(-0.50, 1.00)
+        return f"${base + variation:.2f}"
+    elif any(word in item_lower for word in ['tortilla', 'bread']):
+        base = 3.49
+        variation = random.uniform(-0.50, 1.00)
+        return f"${base + variation:.2f}"
+    elif any(word in item_lower for word in ['seasoning', 'spice', 'packet', 'taco']):
+        base = 1.99
+        variation = random.uniform(-0.30, 0.50)
+        return f"${base + variation:.2f}"
+    elif any(word in item_lower for word in ['bean', 'can']):
+        base = 1.49
+        variation = random.uniform(-0.30, 0.50)
+        return f"${base + variation:.2f}"
+    elif any(word in item_lower for word in ['corn', 'kernel']):
+        base = 1.99
+        variation = random.uniform(-0.30, 0.50)
+        return f"${base + variation:.2f}"
+    elif any(word in item_lower for word in ['onion', 'pepper', 'tomato', 'vegetable', 'diced']):
+        base = 1.29
+        variation = random.uniform(-0.30, 0.50)
+        return f"${base + variation:.2f}"
+    elif any(word in item_lower for word in ['cilantro', 'herb', 'garnish']):
+        base = 0.99
+        variation = random.uniform(-0.20, 0.30)
+        return f"${base + variation:.2f}"
+    elif any(word in item_lower for word in ['lime', 'lemon', 'citrus']):
+        base = 0.79
+        variation = random.uniform(-0.20, 0.30)
+        return f"${base + variation:.2f}"
+    else:
+        base = 3.99
+        variation = random.uniform(-1.00, 2.00)
+        return f"${base + variation:.2f}"
+
+@app.route("/api/target-price", methods=["GET"])
+def get_target_price():
+    """Get price for an item from nearby stores"""
+    try:
+        item_name = request.args.get('item', '').strip()
+        if not item_name:
+            return jsonify({"error": "item parameter is required"}), 400
+        
+        # Try to get price from multiple sources
+        prices = {}
+        
+        # Try Walmart
+        walmart_price = search_walmart_price(item_name)
+        if walmart_price:
+            prices['walmart'] = walmart_price
+        
+        # Try Target
+        target_price = search_target_price(item_name)
+        if target_price:
+            prices['target'] = target_price
+        
+        # If no prices found, use mock price as fallback
+        if not prices:
+            mock_price = get_mock_price(item_name)
+            prices['estimated'] = mock_price
+            return jsonify({
+                "price": mock_price,
+                "source": "estimated",
+                "stores": prices,
+                "note": "Estimated price - actual store prices may vary"
+            })
+        
+        # Return the lowest price found
+        best_price = min(prices.values(), key=lambda x: float(x.replace('$', '')))
+        best_store = [k for k, v in prices.items() if v == best_price][0]
+        
+        return jsonify({
+            "price": best_price,
+            "source": best_store,
+            "stores": prices,
+            "item": item_name
+        })
+        
+    except Exception as e:
+        error_trace = traceback.format_exc()
+        print(f"Error in get_target_price: {str(e)}")
+        print(f"Traceback: {error_trace}")
+        
+        # Return mock price on error
+        item_name = request.args.get('item', 'item')
+        mock_price = get_mock_price(item_name)
+        return jsonify({
+            "price": mock_price,
+            "source": "estimated",
+            "error": "Could not fetch live prices",
+            "note": "Showing estimated price"
+        })
+
+@app.route("/api/store-prices", methods=["POST"])
+def get_store_prices():
+    """Get prices for multiple items from multiple stores"""
+    try:
+        data = request.get_json()
+        items = data.get('items', [])
+        
+        if not items:
+            return jsonify({"error": "items array is required"}), 400
+        
+        results = {}
+        
+        for item in items:
+            item_name = item if isinstance(item, str) else item.get('name', '')
+            if not item_name:
+                continue
+            
+            prices = {}
+            
+            # Try Walmart
+            walmart_price = search_walmart_price(item_name)
+            if walmart_price:
+                prices['walmart'] = walmart_price
+            
+            # Try Target
+            target_price = search_target_price(item_name)
+            if target_price:
+                prices['target'] = target_price
+            
+            # Fallback to mock if no prices found
+            if not prices:
+                prices['estimated'] = get_mock_price(item_name)
+            
+            results[item_name] = {
+                "stores": prices,
+                "best_price": min(prices.values(), key=lambda x: float(x.replace('$', '').replace(',', ''))),
+                "best_store": min(prices.items(), key=lambda x: float(x[1].replace('$', '').replace(',', '')))[0]
+            }
+            
+            # Small delay to avoid rate limiting
+            time.sleep(0.5)
+        
+        return jsonify({
+            "success": True,
+            "prices": results
+        })
+        
+    except Exception as e:
+        error_trace = traceback.format_exc()
+        print(f"Error in get_store_prices: {str(e)}")
+        print(f"Traceback: {error_trace}")
+        return jsonify({
+            "error": str(e),
+            "message": "Failed to fetch store prices"
+        }), 500
 
 @app.route("/api/generate-recipe", methods=["POST"])
 def generate_recipe():
