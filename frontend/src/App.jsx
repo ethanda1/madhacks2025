@@ -48,34 +48,37 @@ function App() {
     alert(`Total Shopping Cost: $${isNaN(total) ? "0.00" : total.toFixed(2)}`);
   }
 
-  function generateIngredients() {
+  async function generateIngredients() {
     if (!mealIdea.trim()) return;
 
-    let ingredients = [];
+    try {
+      const res = await fetch("http://127.0.0.1:5000/api/generate-recipe", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ mealIdea }),
+      });
 
-    if (mealIdea.toLowerCase().includes("tacos")) {
-      ingredients = [
-        { id: 1, name: "Ground Beef (1 lb)" },
-        { id: 2, name: "Taco Seasoning" },
-        { id: 3, name: "Shredded Cheese" },
-        { id: 4, name: "Tortillas" },
-      ];
-    } else if (mealIdea.toLowerCase().includes("pasta")) {
-      ingredients = [
-        { id: 1, name: "Pasta Noodles" },
-        { id: 2, name: "Tomato Sauce" },
-        { id: 3, name: "Parmesan Cheese" },
-      ];
-    } else {
-      ingredients = [
-        { id: 1, name: "Salt" },
-        { id: 2, name: "Pepper" },
-      ];
+      const data = await res.json();
+
+      if (!res.ok) {
+        // Show the actual error message from the backend
+        throw new Error(data.error || data.message || "Network response was not ok");
+      }
+      
+      if (data.success && data.ingredients) {
+        setGeneratedIngredients(
+          data.ingredients.map((i) => ({ ...i, price: null, loading: false }))
+        );
+      } else {
+        throw new Error(data.error || "Failed to generate recipe");
+      }
+    } catch (err) {
+      console.error("generateIngredients error:", err);
+      // Show the actual error message to the user
+      alert(err.message || "Failed to generate recipe. Please try again.");
     }
-
-    setGeneratedIngredients(
-      ingredients.map((i) => ({ ...i, price: null, loading: false }))
-    );
   }
 
   function addToShoppingList(item) {

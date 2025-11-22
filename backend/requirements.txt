@@ -40,3 +40,5 @@ typing_extensions==4.7.1
 tzdata==2025.2
 urllib3==2.1.0
 Werkzeug==2.3.7
+openai>=1.55.3
+python-dotenv==1.0.0
