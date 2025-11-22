@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 import re
 import time
 from urllib.parse import quote_plus
+from serpapi import GoogleSearch
 
 # Load environment variables from .env file
 load_dotenv()
@@ -58,6 +59,154 @@ def check_key():
             "status": "error",
             "message": "API key is NOT set. Please set OPENAI_API_KEY environment variable."
         }), 503
+
+def search_google_shopping_price(item_name, location=None, store_filter=None):
+    """Search for item price using SerpApi Google Shopping API
+    
+    Args:
+        item_name: Name of the item to search for
+        location: Optional location string (e.g., "Austin, Texas, United States")
+        store_filter: Optional store name to filter by (e.g., "Walmart", "Target")
+    """
+    try:
+        api_key = os.getenv('SERPAPI_KEY')
+        if not api_key:
+            print("SERPAPI_KEY not set, skipping Google Shopping search")
+            return None
+        
+        # Clean item name for search - remove quantity info in parentheses
+        search_query = item_name.split('(')[0].strip()
+        
+        # Add "grocery" or "food" to help get grocery store results
+        if not any(word in search_query.lower() for word in ['grocery', 'food', 'ingredient']):
+            search_query = f"{search_query} grocery"
+        
+        params = {
+            "engine": "google_shopping",
+            "q": search_query,
+            "api_key": api_key,
+            "gl": "us",  # Country: United States
+            "hl": "en",  # Language: English
+        }
+        
+        # Add location if provided
+        if location:
+            params["location"] = location
+            print(f"Using location: {location}")
+        
+        # Note: Store filtering via shoprs parameter requires getting tokens from Filters API first
+        # For now, we'll filter results after receiving them
+        # If store_filter is provided, we'll filter the results
+        
+        search = GoogleSearch(params)
+        results = search.get_dict()
+        
+        # Check if we got results
+        if 'shopping_results' not in results or not results['shopping_results']:
+            print(f"Google Shopping: No results found for {search_query}")
+            return None
+        
+        # Extract prices from shopping results
+        prices = {}
+        stores = {}
+        
+        for result in results['shopping_results'][:10]:  # Check top 10 results for better store variety
+            if 'price' in result:
+                price_str = result['price']
+                # Extract numeric price
+                price_match = re.search(r'\$?(\d+\.?\d*)', price_str)
+                if price_match:
+                    price_value = float(price_match.group(1))
+                    source = result.get('source', 'unknown')
+                    
+                    # Filter by store if specified
+                    if store_filter and store_filter.lower() not in source.lower():
+                        continue
+                    
+                    # Extract location information from various fields
+                    # Delivery field often contains location info like "Get it by [date] (Free)" or store pickup info
+                    delivery = result.get('delivery', '')
+                    
+                    # Try to extract store location from the result
+                    # Some results may have location in the source name or delivery field
+                    store_location = None
+                    if location:
+                        # If user provided location, we can infer stores are near that location
+                        store_location = location
+                    elif delivery:
+                        # Try to extract location info from delivery string
+                        # Delivery might contain pickup location info
+                        store_location = delivery
+                    
+                    # Extract extensions (e.g., "Nearby, 3 mi", "37% OFF")
+                    extensions = result.get('extensions', [])
+                    nearby_info = None
+                    for ext in extensions:
+                        if 'nearby' in ext.lower() or 'mi' in ext.lower():
+                            nearby_info = ext
+                            break
+                    
+                    # Store price by source (keep lowest price per source)
+                    if source not in prices:
+                        prices[source] = price_str
+                        stores[source] = {
+                            'price': price_str,
+                            'title': result.get('title', ''),
+                            'link': result.get('product_link', ''),  # Product link for purchasing
+                            'icon': result.get('source_icon', ''),  # Store logo/icon
+                            'thumbnail': result.get('thumbnail', ''),
+                            'rating': result.get('rating'),
+                            'reviews': result.get('reviews'),
+                            'delivery': delivery,
+                            'location': store_location,  # Store location information
+                            'source': source,  # Store name
+                            'nearby': nearby_info,  # Nearby distance info (e.g., "Nearby, 3 mi")
+                            'extensions': extensions  # All extensions
+                        }
+                    else:
+                        # Compare with existing price for this source
+                        existing_price_match = re.search(r'\$?(\d+\.?\d*)', prices[source])
+                        if existing_price_match and price_value < float(existing_price_match.group(1)):
+                            prices[source] = price_str
+                            stores[source] = {
+                                'price': price_str,
+                                'title': result.get('title', ''),
+                                'link': result.get('product_link', ''),  # Product link for purchasing
+                                'icon': result.get('source_icon', ''),
+                                'thumbnail': result.get('thumbnail', ''),
+                                'rating': result.get('rating'),
+                                'reviews': result.get('reviews'),
+                                'delivery': delivery,
+                                'location': store_location,  # Store location information
+                                'source': source,  # Store name
+                                'nearby': nearby_info,  # Nearby distance info (e.g., "Nearby, 3 mi")
+                                'extensions': extensions  # All extensions
+                            }
+        
+        if not prices:
+            print(f"Google Shopping: No valid prices found for {search_query}")
+            return None
+        
+        # Return the best (lowest) price and all store options
+        best_price = min(prices.items(), key=lambda x: float(re.search(r'\$?(\d+\.?\d*)', x[1]).group(1)))
+        best_store = best_price[0]
+        best_price_value = best_price[1]
+        
+        print(f"Google Shopping found price: {best_price_value} from {best_store} for {search_query}")
+        
+        # Return a dict with best price and all stores (including store details)
+        return {
+            'price': best_price_value,
+            'source': best_store,
+            'stores': {k: v['price'] for k, v in stores.items()},
+            'all_results': stores,  # Full store details including logos
+            'location': location
+        }
+        
+    except Exception as e:
+        print(f"Google Shopping search error: {str(e)}")
+        traceback.print_exc()
+        return None
 
 def search_walmart_price(item_name):
     """Search for item price on Walmart.com"""
@@ -224,45 +373,73 @@ def get_mock_price(item_name):
 
 @app.route("/api/target-price", methods=["GET"])
 def get_target_price():
-    """Get price for an item from nearby stores"""
+    """Get price for an item from nearby stores
+    
+    Query parameters:
+        item: Item name (required)
+        location: Location string (optional, e.g., "Austin, Texas, United States")
+        store: Store name to filter by (optional, e.g., "Walmart", "Target")
+    """
     try:
         item_name = request.args.get('item', '').strip()
         if not item_name:
             return jsonify({"error": "item parameter is required"}), 400
         
+        location = request.args.get('location', '').strip() or None
+        store_filter = request.args.get('store', '').strip() or None
+        
         # Try to get price from multiple sources
         prices = {}
         
-        # Try Walmart
+        # PRIMARY: Try Google Shopping API (SerpApi) - most reliable
+        google_shopping_result = search_google_shopping_price(item_name, location=location, store_filter=store_filter)
+        if google_shopping_result:
+            # Add all stores from Google Shopping
+            prices.update(google_shopping_result['stores'])
+            best_price = google_shopping_result['price']
+            best_store = google_shopping_result['source']
+            
+            return jsonify({
+                "price": best_price,
+                "source": best_store,
+                "stores": prices,
+                "store_details": google_shopping_result.get('all_results', {}),  # Include full store details with logos
+                "item": item_name,
+                "location": location,
+                "store_filter": store_filter,
+                "note": f"Live prices from Google Shopping{f' near {location}' if location else ''}"
+            })
+        
+        # FALLBACK 1: Try direct web scraping (Walmart, Target)
         walmart_price = search_walmart_price(item_name)
         if walmart_price:
             prices['walmart'] = walmart_price
         
-        # Try Target
         target_price = search_target_price(item_name)
         if target_price:
             prices['target'] = target_price
         
-        # If no prices found, use mock price as fallback
-        if not prices:
-            mock_price = get_mock_price(item_name)
-            prices['estimated'] = mock_price
+        # If we got prices from scraping, return them
+        if prices:
+            best_price = min(prices.values(), key=lambda x: float(x.replace('$', '').replace(',', '')))
+            best_store = [k for k, v in prices.items() if v == best_price][0]
+            
             return jsonify({
-                "price": mock_price,
-                "source": "estimated",
+                "price": best_price,
+                "source": best_store,
                 "stores": prices,
-                "note": "Estimated price - actual store prices may vary"
+                "item": item_name,
+                "note": "Prices from web scraping - may be less accurate"
             })
         
-        # Return the lowest price found
-        best_price = min(prices.values(), key=lambda x: float(x.replace('$', '')))
-        best_store = [k for k, v in prices.items() if v == best_price][0]
-        
+        # FALLBACK 2: Use mock price as final fallback
+        mock_price = get_mock_price(item_name)
+        prices['estimated'] = mock_price
         return jsonify({
-            "price": best_price,
-            "source": best_store,
+            "price": mock_price,
+            "source": "estimated",
             "stores": prices,
-            "item": item_name
+            "note": "Estimated price - actual store prices may vary. Please set SERPAPI_KEY for live prices."
         })
         
     except Exception as e:
@@ -276,8 +453,9 @@ def get_target_price():
         return jsonify({
             "price": mock_price,
             "source": "estimated",
-            "error": "Could not fetch live prices",
-            "note": "Showing estimated price"
+            "stores": {"estimated": mock_price},
+            "error": str(e),
+            "note": "Estimated price due to error. Please check SERPAPI_KEY configuration."
         })
 
 @app.route("/api/store-prices", methods=["POST"])
@@ -299,27 +477,45 @@ def get_store_prices():
             
             prices = {}
             
-            # Try Walmart
-            walmart_price = search_walmart_price(item_name)
-            if walmart_price:
-                prices['walmart'] = walmart_price
+            # PRIMARY: Try Google Shopping API (SerpApi)
+            # Note: For batch requests, we could accept location/store per item, but for simplicity
+            # we'll use the same location/store for all items in a batch
+            location = data.get('location', '').strip() or None
+            store_filter = data.get('store', '').strip() or None
             
-            # Try Target
-            target_price = search_target_price(item_name)
-            if target_price:
-                prices['target'] = target_price
+            google_shopping_result = search_google_shopping_price(item_name, location=location, store_filter=store_filter)
+            if google_shopping_result:
+                prices.update(google_shopping_result['stores'])
+            else:
+                # FALLBACK: Try direct web scraping
+                walmart_price = search_walmart_price(item_name)
+                if walmart_price:
+                    prices['walmart'] = walmart_price
+                
+                target_price = search_target_price(item_name)
+                if target_price:
+                    prices['target'] = target_price
+                
+                # Final fallback to mock if no prices found
+                if not prices:
+                    prices['estimated'] = get_mock_price(item_name)
             
-            # Fallback to mock if no prices found
-            if not prices:
-                prices['estimated'] = get_mock_price(item_name)
+            # Calculate best price
+            if prices:
+                best_price = min(prices.values(), key=lambda x: float(x.replace('$', '').replace(',', '')))
+                best_store = min(prices.items(), key=lambda x: float(x[1].replace('$', '').replace(',', '')))[0]
+            else:
+                best_price = get_mock_price(item_name)
+                best_store = "estimated"
+                prices['estimated'] = best_price
             
             results[item_name] = {
                 "stores": prices,
-                "best_price": min(prices.values(), key=lambda x: float(x.replace('$', '').replace(',', ''))),
-                "best_store": min(prices.items(), key=lambda x: float(x[1].replace('$', '').replace(',', '')))[0]
+                "best_price": best_price,
+                "best_store": best_store
             }
             
-            # Small delay to avoid rate limiting
+            # Small delay to avoid rate limiting (especially for SerpApi)
             time.sleep(0.5)
         
         return jsonify({
