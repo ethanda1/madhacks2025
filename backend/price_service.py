@@ -97,7 +97,8 @@ def search_google_shopping_price(item_name, location=None, store_filter=None):
                             'title': result.get('title', ''),
                             'link': result.get('product_link', ''),  # Product link for purchasing
                             'icon': result.get('source_icon', ''),  # Store logo/icon
-                            'thumbnail': result.get('thumbnail', ''),
+                            'thumbnail': result.get('thumbnail', ''),  # Product thumbnail image
+                            'serpapi_thumbnail': result.get('serpapi_thumbnail', ''),  # Alternative thumbnail
                             'rating': result.get('rating'),
                             'reviews': result.get('reviews'),
                             'delivery': delivery,
@@ -117,7 +118,8 @@ def search_google_shopping_price(item_name, location=None, store_filter=None):
                                 'title': result.get('title', ''),
                                 'link': result.get('product_link', ''),  # Product link for purchasing
                                 'icon': result.get('source_icon', ''),
-                                'thumbnail': result.get('thumbnail', ''),
+                                'thumbnail': result.get('thumbnail', ''),  # Product thumbnail image
+                                'serpapi_thumbnail': result.get('serpapi_thumbnail', ''),  # Alternative thumbnail
                                 'rating': result.get('rating'),
                                 'reviews': result.get('reviews'),
                                 'delivery': delivery,
