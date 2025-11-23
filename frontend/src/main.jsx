@@ -1,24 +1,17 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
-import { useDarkMode } from './useDarkMode'
-
-function Root() {
-
-  return (
-    <>
-      {/* Dark Mode Toggle Button */}
-     
-      <App />
-    </>
-  );
-}
+import RecipePage from './RecipePage.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <Root />
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<App />} />
+        <Route path="/recipe" element={<RecipePage />} />
+      </Routes>
+    </BrowserRouter>
   </StrictMode>,
 )
-
-export default Root;
