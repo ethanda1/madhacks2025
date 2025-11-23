@@ -602,9 +602,21 @@ function App() {
                                 <div className="text-lg font-semibold text-emerald-700 dark:text-emerald-400">
                                   {item.price}
                                 </div>
-                                {item.priceSource && (
-                                  <div className="text-xs text-slate-600">{item.priceSource}</div>
-                                )}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {item.priceSource && (
+                                    <span className="text-xs text-slate-600">{item.priceSource}</span>
+                                  )}
+                                  {item.storeDetails && item.storeDetails[item.priceSource]?.discount && (
+                                    <span className="text-xs px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded font-medium">
+                                      {item.storeDetails[item.priceSource].discount}
+                                    </span>
+                                  )}
+                                  {item.storeDetails && item.storeDetails[item.priceSource]?.nearby && (
+                                    <span className="text-xs px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded">
+                                      {item.storeDetails[item.priceSource].nearby}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                             {(() => {
@@ -648,13 +660,25 @@ function App() {
                                     const isSelected = shoppingList.some(s => s.baseId === item.id && s.store === store);
                                     return (
                                       <div key={store} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800 rounded text-sm">
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 flex-1 min-w-0">
                                           {storeDetail?.icon && (
-                                            <img src={storeDetail.icon} alt={store} className="w-6 h-6 object-contain" />
+                                            <img src={storeDetail.icon} alt={store} className="w-6 h-6 object-contain flex-shrink-0" />
                                           )}
-                                          <div>
+                                          <div className="flex-1 min-w-0">
                                             <div className="font-medium">{store}</div>
-                                            <div className="text-emerald-600 dark:text-emerald-400 font-semibold">{price}</div>
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{price}</span>
+                                              {storeDetail?.discount && (
+                                                <span className="text-xs px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded font-medium">
+                                                  {storeDetail.discount}
+                                                </span>
+                                              )}
+                                              {storeDetail?.nearby && (
+                                                <span className="text-xs px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded">
+                                                  {storeDetail.nearby}
+                                                </span>
+                                              )}
+                                            </div>
                                           </div>
                                         </div>
                                         <button
